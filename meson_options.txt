@@ -1,0 +1,2 @@
+option('xz', type: 'feature', value: 'auto', description: 'Write xz compressed images through liblzma')
+option('zstd', type: 'feature', value: 'auto', description: 'Write Zstandard compressed images through libzstd')

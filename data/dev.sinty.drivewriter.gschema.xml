@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="dev.sinty.drivewriter" path="/dev/sinty/drivewriter/">
+    <key name="verify-after-write" type="b">
+      <default>true</default>
+      <summary>Check the drive after writing</summary>
+      <description>Read everything back after writing and compare it with the image.</description>
+    </key>
+    <key name="write-at-once" type="b">
+      <default>true</default>
+      <summary>Write several drives at once</summary>
+      <description>Write all chosen drives at the same time instead of one after the other.</description>
+    </key>
+  </schema>
+</schemalist>

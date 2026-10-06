@@ -1,0 +1,7 @@
+src/app.vala
+src/window.vala
+src/image.vala
+src/writer.vala
+src/udisks.vala
+src/format.vala
+src/checksum.vala

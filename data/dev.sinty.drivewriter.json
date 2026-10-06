@@ -1,0 +1,19 @@
+{
+    "schema-id": "dev.sinty.drivewriter",
+    "settings": [
+        {
+            "key": "verify-after-write",
+            "label": "Check the Drive After Writing",
+            "subtitle": "Reads everything back and compares it with the image",
+            "type": "boolean",
+            "widget": "toggle"
+        },
+        {
+            "key": "write-at-once",
+            "label": "Write Several Drives at Once",
+            "subtitle": "Otherwise drives are written one after the other",
+            "type": "boolean",
+            "widget": "toggle"
+        }
+    ]
+}

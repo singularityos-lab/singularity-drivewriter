@@ -1,0 +1,16 @@
+[Desktop Entry]
+Name=Drive Writer
+Comment=Write disk images to USB drives and memory cards
+Exec=singularity-drivewriter %f
+Icon=dev.sinty.drivewriter
+Terminal=false
+Type=Application
+Categories=Utility;System;
+MimeType=application/x-cd-image;application/x-raw-disk-image;application/x-raw-disk-image-xz-compressed;application/vnd.efi.iso;application/vnd.efi.img;
+Keywords=usb;iso;image;flash;write;burn;bootable;drive;installer;
+StartupWMClass=dev.sinty.drivewriter
+Actions=restore-drive;
+
+[Desktop Action restore-drive]
+Name=Restore a Drive
+Exec=singularity-drivewriter --restore
