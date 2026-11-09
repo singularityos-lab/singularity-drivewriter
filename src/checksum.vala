@@ -220,23 +220,24 @@ namespace Singularity.Apps.DriveWriter {
             total = info.get_size ();
             Error? failure = null;
             string result = "";
-            SourceFunc callback = run.callback;
-            new Thread<bool> ("drivewriter-hash", () => {
-                try {
-                    var stream = file.read (cancellable);
-                    result = hash_stream (stream, kind, cancellable, (n) => {
-                        mutex.lock ();
-                        done = n;
-                        mutex.unlock ();
-                    });
-                    stream.close ();
-                } catch (Error e) {
-                    failure = e;
-                }
-                Idle.add ((owned) callback);
-                return true;
-            });
-            yield;
+            try {
+                yield Async.run<bool>((c) => {
+                    try {
+                        var stream = file.read (cancellable);
+                        result = hash_stream (stream, kind, cancellable, (n) => {
+                            mutex.lock ();
+                            done = n;
+                            mutex.unlock ();
+                        });
+                        stream.close ();
+                    } catch (Error e) {
+                        failure = e;
+                    }
+                    return true;
+                }, Async.Qos.USER);
+            } catch (Error e) {
+                warning("%s", e.message);
+            }
             if (failure != null) throw failure;
             return result;
         }

@@ -174,24 +174,25 @@ namespace Singularity.Apps.DriveWriter {
             Error? failure = null;
             string? hash = null;
             uint64 count = 0;
-            SourceFunc callback = write.callback;
-            new Thread<bool> ("drivewriter-write", () => {
-                try {
-                    hash = Copier.write_stream (source.stream, fd, cancellable, (n) => {
-                        uint64 at = source.position ();
-                        mutex.lock ();
-                        bytes_done = n;
-                        position_done = at;
-                        mutex.unlock ();
-                    }, out count);
-                } catch (Error e) {
-                    failure = e;
-                }
-                source.close ();
-                Idle.add ((owned) callback);
-                return true;
-            });
-            yield;
+            try {
+                yield Async.run<bool>((c) => {
+                    try {
+                        hash = Copier.write_stream (source.stream, fd, cancellable, (n) => {
+                            uint64 at = source.position ();
+                            mutex.lock ();
+                            bytes_done = n;
+                            position_done = at;
+                            mutex.unlock ();
+                        }, out count);
+                    } catch (Error e) {
+                        failure = e;
+                    }
+                    source.close ();
+                    return true;
+                }, Async.Qos.USER);
+            } catch (Error e) {
+                warning("%s", e.message);
+            }
             stop_ticker (Phase.WRITING, total);
             if (failure != null) throw failure;
             written = count;
@@ -201,22 +202,23 @@ namespace Singularity.Apps.DriveWriter {
         public async void verify (int fd) throws Error {
             start_ticker (Phase.VERIFYING, written);
             Error? failure = null;
-            SourceFunc callback = verify.callback;
-            new Thread<bool> ("drivewriter-verify", () => {
-                try {
-                    Copier.verify (fd, checksum, written, cancellable, (n) => {
-                        mutex.lock ();
-                        bytes_done = n;
-                        position_done = n;
-                        mutex.unlock ();
-                    });
-                } catch (Error e) {
-                    failure = e;
-                }
-                Idle.add ((owned) callback);
-                return true;
-            });
-            yield;
+            try {
+                yield Async.run<bool>((c) => {
+                    try {
+                        Copier.verify (fd, checksum, written, cancellable, (n) => {
+                            mutex.lock ();
+                            bytes_done = n;
+                            position_done = n;
+                            mutex.unlock ();
+                        });
+                    } catch (Error e) {
+                        failure = e;
+                    }
+                    return true;
+                }, Async.Qos.USER);
+            } catch (Error e) {
+                warning("%s", e.message);
+            }
             stop_ticker (Phase.VERIFYING, written);
             if (failure != null) throw failure;
         }

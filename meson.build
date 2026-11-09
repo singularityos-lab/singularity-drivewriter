@@ -67,7 +67,7 @@ image_test = executable('drivewriter-test',
   vala_args: bridge_vala_args,
   include_directories: include_directories('src'),
   link_with: bridge,
-  dependencies: [gee_dep, gio_dep, gio_unix_dep, posix_dep, m_dep],
+  dependencies: [gee_dep, gio_dep, gio_unix_dep, posix_dep, m_dep, libsingularity_dep],
 )
 test('image', image_test, env: ['DRIVEWRITER_FIXTURES=' + meson.current_source_dir() / 'tests' / 'fixtures'])
 
@@ -76,7 +76,7 @@ checksum_test = executable('checksum-test',
   vala_args: bridge_vala_args,
   include_directories: include_directories('src'),
   link_with: bridge,
-  dependencies: [gee_dep, gio_dep, gio_unix_dep, posix_dep, m_dep],
+  dependencies: [gee_dep, gio_dep, gio_unix_dep, posix_dep, m_dep, libsingularity_dep],
 )
 test('checksum', checksum_test)
 
