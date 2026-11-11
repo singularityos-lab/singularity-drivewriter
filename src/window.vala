@@ -522,6 +522,11 @@ namespace Singularity.Apps.DriveWriter {
                 show_error (_("The Image Cannot Be Opened"), e.message);
                 return;
             }
+            apply_image (info);
+        }
+
+        private void apply_image (ImageInfo info) {
+            var file = info.file;
             image = info;
             try {
                 var fi = file.query_info (FileAttribute.STANDARD_ICON, FileQueryInfoFlags.NONE);
@@ -1402,6 +1407,139 @@ namespace Singularity.Apps.DriveWriter {
                 }
             });
             add_action (select_all);
+        }
+            internal bool agent_ready () {
+            return !client_loading;
+        }
+
+        internal string agent_client_error () {
+            return client_error;
+        }
+
+        internal UDisksClient? agent_client () {
+            return client;
+        }
+
+        internal bool agent_busy () {
+            return busy;
+        }
+
+        internal ImageInfo? agent_image () {
+            return image;
+        }
+
+        internal ExpectedHash? agent_expected () {
+            return expected;
+        }
+
+        internal string agent_check_state () {
+            switch (check_state) {
+                case CheckState.READY: return "not checked yet";
+                case CheckState.CHECKING: return "checking";
+                case CheckState.MATCH: return "matches";
+                case CheckState.MISMATCH: return "does not match";
+                case CheckState.FAILED: return "could not be checked: " + check_error;
+                default: return "no checksum";
+            }
+        }
+
+        internal bool agent_verify_after () {
+            return settings.verify;
+        }
+
+        internal void agent_set_image (File file) throws Error {
+            if (busy) throw new IOError.BUSY ("Drive Writer is busy writing or restoring a drive");
+            var info = new ImageInfo (file);
+            info.inspect ();
+            apply_image (info);
+            present ();
+        }
+
+        internal async bool agent_check (string? hash) throws Error {
+            if (busy) throw new IOError.BUSY ("Drive Writer is busy writing or restoring a drive");
+            if (image == null) throw new IOError.NOT_FOUND ("choose an image first with drivewriter_image");
+            if (hash != null && hash.strip () != "") {
+                var list = ChecksumList.parse (hash);
+                set_expected (list.expected_for (image.name, _("the assistant")), true);
+            }
+            if (expected == null) throw new IOError.NOT_FOUND ("no checksum is known for %s; give the SHA-256 or SHA-512 value from its download page", image.name);
+            if (check_state == CheckState.CHECKING) throw new IOError.BUSY ("the image is already being checked");
+            return yield run_check (false);
+        }
+
+        internal void agent_write (Gee.List<TargetDrive> targets) throws Error {
+            if (busy) throw new IOError.BUSY ("Drive Writer is busy writing or restoring a drive");
+            if (image == null) throw new IOError.NOT_FOUND ("choose an image first with drivewriter_image");
+            if (image.problem != null) throw new IOError.INVALID_DATA ("%s", image.problem);
+            if (targets.size == 0) throw new IOError.INVALID_ARGUMENT ("give at least one drive from drivewriter_drives");
+            if (check_state == CheckState.MISMATCH) throw new IOError.INVALID_DATA ("%s does not match its checksum; nothing is written", image.name);
+            if (check_state == CheckState.CHECKING) throw new IOError.BUSY ("the image is still being checked");
+            foreach (var t in targets) {
+                if (image.fits (t.size) == Fit.TOO_LARGE) throw new IOError.NO_SPACE ("%s (%s) is too small for %s", t.title, Format.size (t.size), image.name);
+            }
+            stack.visible_child_name = "setup";
+            rebuild_drives ();
+            foreach (var c in checks.values) c.active = false;
+            foreach (var t in targets) {
+                var c = checks[t.id];
+                if (c != null) c.active = true;
+            }
+            present ();
+            run_all.begin (targets);
+        }
+
+        internal void agent_stop () throws Error {
+            if (!busy) throw new IOError.NOT_FOUND ("nothing is being written");
+            if (restoring) throw new IOError.BUSY ("a drive is being restored and cannot be stopped halfway");
+            if (hash_job != null) hash_job.cancellable.cancel ();
+            foreach (var t in tasks) if (t.job != null) t.job.cancel ();
+            stopped = true;
+        }
+
+        internal async void agent_restore (TargetDrive target, FileSystemKind kind, string name) throws Error {
+            if (busy) throw new IOError.BUSY ("Drive Writer is busy writing or restoring a drive");
+            if (kind == FileSystemKind.EXFAT && !exfat_available) throw new IOError.NOT_SUPPORTED ("exFAT cannot be created on this computer; use fat32");
+            string label = kind.normalize_label (name);
+            string? problem = kind.check_label (label);
+            if (problem != null) throw new IOError.INVALID_ARGUMENT ("%s", problem);
+            show_restore ();
+            present ();
+            yield run_restore (target, kind, label);
+        }
+
+        internal void agent_progress (Json.Builder b) {
+            string page = stack.visible_child_name;
+            b.set_member_name ("page").add_string_value (page);
+            b.set_member_name ("busy").add_boolean_value (busy);
+            if (busy) {
+                b.set_member_name ("phase").add_string_value (phase_label.label);
+                if (target_label.label != "") b.set_member_name ("what").add_string_value (target_label.label);
+                if (!restoring) b.set_member_name ("percent").add_int_value ((int64) Math.floor (ring.fraction.clamp (0, 1) * 100));
+                if (detail_label.label != "") b.set_member_name ("detail").add_string_value (detail_label.label);
+            }
+            if (page == "result") {
+                b.set_member_name ("result").add_string_value (result_page.title);
+                b.set_member_name ("message").add_string_value (result_page.description ?? "");
+            }
+            if (tasks.size == 0 || page == "restore" || return_page == "restore") return;
+            b.set_member_name ("drives").begin_array ();
+            foreach (var t in tasks) {
+                b.begin_object ();
+                b.set_member_name ("drive").add_string_value (t.target.title);
+                b.set_member_name ("device").add_string_value (t.target.device);
+                string state;
+                if (!t.finished) state = t.job == null ? "waiting" : (t.phase == Phase.WRITING ? "writing" : "checking");
+                else state = t.ok ? "done" : "failed";
+                b.set_member_name ("state").add_string_value (state);
+                if (!t.finished) b.set_member_name ("percent").add_int_value ((int64) Math.floor (t.fraction.clamp (0, 1) * 100));
+                if (t.finished && t.ok) {
+                    b.set_member_name ("checked").add_boolean_value (t.verified);
+                    b.set_member_name ("ejected").add_boolean_value (t.ejected);
+                }
+                if (t.finished && !t.ok) b.set_member_name ("error").add_string_value (t.failure_title + ": " + t.failure);
+                b.end_object ();
+            }
+            b.end_array ();
         }
     }
 }

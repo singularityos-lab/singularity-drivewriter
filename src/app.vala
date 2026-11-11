@@ -61,6 +61,7 @@ namespace Singularity.Apps.DriveWriter {
             view.append (_("Refresh Drives"), "win.refresh");
             menu.append_submenu (_("View"), view);
             set_menubar (menu);
+            DriveWriterIntents.install (this);
             var quit = new SimpleAction ("quit", null);
             quit.activate.connect (() => {
                 foreach (var w in get_windows ().copy ()) w.close ();

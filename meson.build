@@ -54,6 +54,7 @@ executable('singularity-drivewriter',
   core_sources + files(
     'src/window.vala',
     'src/app.vala',
+    'src/agent_intents.vala',
   ),
   vala_args: bridge_vala_args,
   include_directories: include_directories('src'),
