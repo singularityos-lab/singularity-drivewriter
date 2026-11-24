@@ -2,7 +2,7 @@ using Gtk;
 
 namespace Singularity.Apps.DriveWriter {
 
-    public class DriveWriterApp : Singularity.Application, Singularity.Migration.Migratable {
+    public class DriveWriterApp : Singularity.Application, Singularity.Migration.Migratable, Singularity.Startup.Bootable {
         private bool restore_pending;
 
         public DriveWriterApp () {
@@ -104,7 +104,38 @@ namespace Singularity.Apps.DriveWriter {
             set_accels_for_action ("win.restore", { "<Control><Shift>r" });
         }
 
-        public override void activate () {
+        public Singularity.Startup.Plan build_plan (Singularity.Startup.Request request) {
+            var plan = new Singularity.Startup.Plan ();
+            plan.version = "drivewriter-1";
+            if (request.kind == Singularity.Startup.RequestKind.SERVICE) {
+                plan.main ("ready", Singularity.Startup.Category.PREPARE, (c) => {})
+                    .reaches (Singularity.Startup.Milestone.SHELL_READY)
+                    .reaches (Singularity.Startup.Milestone.CONTENT_READY)
+                    .reaches (Singularity.Startup.Milestone.INTERACTIVE);
+                return plan;
+            }
+            var window = plan.main ("window", Singularity.Startup.Category.SHELL, (c) => {
+                show_window ();
+                c.window = get_active_window ();
+            }).reaches (Singularity.Startup.Milestone.SHELL_READY);
+            if (request.kind == Singularity.Startup.RequestKind.OPEN) {
+                var files = request.files ();
+                plan.main ("open-file", Singularity.Startup.Category.CONTENT, (c) => open_files (files))
+                    .depends_on ("window")
+                    .reaches (Singularity.Startup.Milestone.CONTENT_READY)
+                    .reaches (Singularity.Startup.Milestone.INTERACTIVE);
+            } else {
+                window.reaches (Singularity.Startup.Milestone.CONTENT_READY).reaches (Singularity.Startup.Milestone.INTERACTIVE);
+            }
+            return plan;
+        }
+
+        public void handle_request (Singularity.Startup.Request request) {
+            show_window ();
+            if (request.kind == Singularity.Startup.RequestKind.OPEN) open_files (request.files ());
+        }
+
+        private void show_window () {
             var w = get_active_window ();
             if (w == null) w = new WriterWindow (this);
             w.present ();
@@ -114,8 +145,7 @@ namespace Singularity.Apps.DriveWriter {
             }
         }
 
-        public override void open (File[] files, string hint) {
-            activate ();
+        private void open_files (File[] files) {
             var w = get_active_window () as WriterWindow;
             if (w != null && files.length > 0) w.set_image (files[0]);
         }
