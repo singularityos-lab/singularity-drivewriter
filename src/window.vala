@@ -735,6 +735,68 @@ namespace Singularity.Apps.DriveWriter {
             sync ();
         }
 
+        public void prepare_move () throws Singularity.Migration.MigrationError {
+            if (busy) throw new Singularity.Migration.MigrationError.UNSUPPORTED (_("Drive Writer is writing to a drive. Move it when the drive is ready."));
+            if (check_state == CheckState.CHECKING) throw new Singularity.Migration.MigrationError.UNSUPPORTED (_("Drive Writer is checking the image. Move it when the check is done."));
+        }
+
+        public bool is_unused () {
+            return image == null && !busy;
+        }
+
+        public string[] migration_files () {
+            if (image == null) return {};
+            return { Singularity.Migration.portable_path (image.file) };
+        }
+
+        public Variant save_migration () {
+            var d = new VariantDict ();
+            d.insert_value ("page", new Variant.string (stack.visible_child_name));
+            d.insert_value ("return-page", new Variant.string (return_page));
+            d.insert_value ("image", new Variant.string (image != null ? Singularity.Migration.portable_path (image.file) : ""));
+            d.insert_value ("paste", new Variant.string (paste_row.text));
+            if (expected != null) d.insert_value ("expected", new Variant ("(issb)", (int) expected.kind, expected.hex, expected.source, expected_from_paste));
+            d.insert_value ("check", new Variant ("(is)", (int) check_state, check_error));
+            d.insert_value ("format", new Variant.string (fs_row.current_value));
+            return d.end ();
+        }
+
+        public void restore_migration (Variant data) {
+            var d = new VariantDict (data);
+            string path = (d.lookup_value ("image", VariantType.STRING) ?? new Variant.string ("")).get_string ();
+            if (path != "") set_image (Singularity.Migration.local_file (path));
+            if (image != null) {
+                paste_row.text = (d.lookup_value ("paste", VariantType.STRING) ?? new Variant.string ("")).get_string ();
+                var hash = d.lookup_value ("expected", new VariantType ("(issb)"));
+                if (hash != null) {
+                    int kind;
+                    string hex, source;
+                    bool from_paste;
+                    hash.get ("(issb)", out kind, out hex, out source, out from_paste);
+                    set_expected (new ExpectedHash ((ChecksumType) kind, hex, source), from_paste);
+                } else {
+                    set_expected (null, false);
+                }
+                var check = d.lookup_value ("check", new VariantType ("(is)"));
+                if (check != null && expected != null) {
+                    int state;
+                    string error;
+                    check.get ("(is)", out state, out error);
+                    check_state = (CheckState) state == CheckState.CHECKING ? CheckState.READY : (CheckState) state;
+                    check_error = error;
+                    update_check_row ();
+                }
+            }
+            fs_row.current_value = (d.lookup_value ("format", VariantType.STRING) ?? new Variant.string ("FAT32")).get_string ();
+            string page = (d.lookup_value ("page", VariantType.STRING) ?? new Variant.string ("welcome")).get_string ();
+            if (page == "restore") show_restore ();
+            else if (page == "welcome") stack.visible_child_name = "welcome";
+            string back = (d.lookup_value ("return-page", VariantType.STRING) ?? new Variant.string ("welcome")).get_string ();
+            return_page = back == "setup" ? "setup" : "welcome";
+            sync_restore ();
+            sync ();
+        }
+
         private Gee.List<TargetDrive> chosen_drives () {
             var list = new Gee.ArrayList<TargetDrive> ();
             foreach (var d in drives) if (chosen.contains (d.id)) list.add (d);

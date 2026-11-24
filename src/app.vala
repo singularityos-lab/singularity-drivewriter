@@ -2,7 +2,7 @@ using Gtk;
 
 namespace Singularity.Apps.DriveWriter {
 
-    public class DriveWriterApp : Singularity.Application {
+    public class DriveWriterApp : Singularity.Application, Singularity.Migration.Migratable {
         private bool restore_pending;
 
         public DriveWriterApp () {
@@ -118,6 +118,48 @@ namespace Singularity.Apps.DriveWriter {
             activate ();
             var w = get_active_window () as WriterWindow;
             if (w != null && files.length > 0) w.set_image (files[0]);
+        }
+
+        public void prepare_move () throws Singularity.Migration.MigrationError {
+            foreach (var w in get_windows ()) {
+                if (w is WriterWindow) ((WriterWindow) w).prepare_move ();
+            }
+        }
+
+        public Variant save_model () {
+            return new VariantDict ().end ();
+        }
+
+        public async void restore_model (Variant model) throws Error {
+        }
+
+        public string window_kind (Gtk.Window w) {
+            return (w is WriterWindow) ? "writer" : "";
+        }
+
+        public Variant save_window (Gtk.Window w) {
+            return ((WriterWindow) w).save_migration ();
+        }
+
+        public string[] files () {
+            string[] all = {};
+            foreach (var w in get_windows ()) {
+                if (!(w is WriterWindow)) continue;
+                foreach (var f in ((WriterWindow) w).migration_files ()) all += f;
+            }
+            return all;
+        }
+
+        public async Gtk.Window? rebuild_window (string kind, Variant data) throws Error {
+            if (kind != "writer") return null;
+            WriterWindow? w = null;
+            foreach (var x in get_windows ()) {
+                var ww = x as WriterWindow;
+                if (ww != null && ww.is_unused ()) w = ww;
+            }
+            if (w == null) w = new WriterWindow (this);
+            w.restore_migration (data);
+            return w;
         }
 
         private const string CSS = """
